@@ -1,6 +1,10 @@
 {
-  "version": "1.4.0",
+  "version": "1.4.1",
   "name": "iterffect",
+  "repository": {
+    "url": "https://github.com/eloytoro/iterffect",
+    "type": "git"
+  },
   "description": "Define business logic in cancellable, forkable, asynchronous javascript generator definitions and promises",
   "main": "lib/index.js",
   "module": "es/index.js",
