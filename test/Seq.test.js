@@ -138,41 +138,30 @@ describe('Seq', () => {
       throw err
     }
     const seq = new Seq(gen())
-    await expect(seq.promise).to.be.rejectedWith(err)
+    await expect(seq.promise).eventually.to.be.rejectedWith(err)
   })
 
   it('handles errors', async () => {
     const err = new Error()
     const handle = sinon.spy()
     function* gen() {
-      try {
-        yield Promise.reject(err)
-      } catch (err) {
-        handle(err)
-      }
+      yield Promise.reject(err)
     }
     const seq = new Seq(gen())
-    await seq.promise
-    expect(handle).to.have.been.calledWith(err)
+    await expect(seq.promise).eventually.to.be.rejectedWith(err)
   })
 
   it('propagates errors', async () => {
     const err = new Error()
-    const handle = sinon.spy()
     function* delayErr() {
       yield delay(20)
       throw err
     }
     function* gen() {
-      try {
-        yield delayErr()
-      } catch (err) {
-        handle(err)
-      }
+      yield delayErr()
     }
     const seq = new Seq(gen())
-    await seq.promise
-    expect(handle).to.have.been.calledWith(err)
+    await expect(seq.promise).eventually.to.be.rejectedWith(err)
   })
 
   it('resolves a sequence with throwing children', async () => {

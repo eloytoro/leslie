@@ -80,9 +80,8 @@ export const latest = (observable, listener) =>
 
 export const once = effect(
   (fn) => fn,
-  async (seq, fn) => {
-    const child = await seq.next(observe(fn))
-    return child.promise
+  (seq, fn) => {
+    return seq.run(observe(fn)).then(child => child.promise)
   }
 )
 
@@ -90,6 +89,6 @@ export const teardown = effect(
   (input, fn) => ({ input, fn }),
   (seq, { input, fn }) => {
     const unsub = seq.listen('cancel', () => fn(input))
-    return seq.next(input).finally(unsub)
+    return seq.run(input).finally(unsub)
   }
 )

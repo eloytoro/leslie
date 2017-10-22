@@ -35,7 +35,7 @@ describe('real-world', () => {
       }
 
       render() {
-        return React.createElement('li', { onClick: this.handleClick }, this.props.todo.count)
+        return React.createElement('li', null, this.props.todo.count)
       }
     })
 
