@@ -48,14 +48,14 @@ export const observe = effect(
   (seq, { observable, listener, opts }) => {
     const fg = seq.spawn(forever())
     let child
-    const onNext = value => {
+    const onNext = (...args) => {
       if (opts.latest && child) {
         child.cancel()
       }
       if (typeof listener === 'function') {
-        child = fg.spawn(listener(value))
+        child = fg.spawn(listener(...args))
       } else {
-        fg.resolve(value)
+        fg.resolve(args[0])
       }
     }
     const onError = err => fg.reject(err)

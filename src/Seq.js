@@ -7,12 +7,12 @@ import {
 import { forever } from './effects'
 
 class Seq {
-  static handler(sequenceableFn) {
+  static latest(sequenceableFn) {
     const fg = new Seq(forever())
     let deferred = defer()
-    const fn = (event) => {
+    const fn = function (...args) {
       fg.free()
-      const child = fg.spawn(sequenceableFn(event))
+      const child = fg.spawn(sequenceableFn.call(this, ...args))
       child.listen('done', (err, result) => {
         if (err) {
           deferred.reject(err)
@@ -23,7 +23,37 @@ class Seq {
       })
       return deferred.promise
     }
-    fn.cancel = () => fg.cancel()
+    fn.cancel = () => fg.free()
+    return fn
+  }
+
+  static handle(sequenceableFn) {
+    console.warn('Seq.handler was deprecated, use Seq.latest instead')
+    return Seq.latest(sequenceableFn)
+  }
+
+  static every(sequenceableFn) {
+    const fg = new Seq(forever())
+    const fn = function (...args) {
+      const child = fg.spawn(sequenceableFn.call(this, ...args))
+      return child.promise
+    }
+    fn.cancel = fg.free()
+    return fn
+  }
+
+  static channel(sequenceableFn) {
+    const fg = new Seq(forever())
+    const fn = function (...args) {
+      const ctx = this
+      const last = fg.children.length && fg.children[fg.children.length - 1].promise
+      const child = fg.spawn(function* () {
+        yield last
+        return yield sequenceableFn.call(ctx, ...args)
+      })
+      return child.promise
+    }
+    fn.cancel = () => fg.free()
     return fn
   }
 

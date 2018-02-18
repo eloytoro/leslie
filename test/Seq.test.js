@@ -179,10 +179,10 @@ describe('Seq', () => {
     await expect(seq.promise).to.be.rejectedWith(err)
   })
 
-  describe('Seq#handler', () => {
+  describe('Seq#latest', () => {
     it('fires function on call', async () => {
       const spy = sinon.spy(res => res)
-      const handler = Seq.handler(spy)
+      const handler = Seq.latest(spy)
       const result = handler('hello')
       expect(spy).to.have.been.calledWith('hello')
       await expect(result).to.eventually.equal('hello')
@@ -190,7 +190,7 @@ describe('Seq', () => {
 
     it('cancels previous calls and returns last', async () => {
       const spy = sinon.spy()
-      const handler = Seq.handler(function* (event) {
+      const handler = Seq.latest(function* (event) {
         yield delay(20)
         spy()
         return event
@@ -204,6 +204,55 @@ describe('Seq', () => {
       expect(spy).to.have.been.calledOnce
       const three = handler('three')
       await expect(three).to.eventually.equal('three')
+    })
+  })
+
+  describe('Seq#channel', () => {
+    it('fires function on call', async () => {
+      const spy = sinon.spy(res => res)
+      const handler = Seq.channel(spy)
+      const result = handler('hello')
+      await expect(result).to.eventually.equal('hello')
+      expect(spy).to.have.been.calledWith('hello')
+    })
+
+    it('queues the task after the last one', async () => {
+      const spy = sinon.spy()
+      let count = 0
+      const handler = Seq.channel(function* () {
+        spy(count)
+        yield delay(10)
+        count = count + 1
+      })
+      handler()
+      handler()
+      await handler()
+      expect(spy.args).to.deep.equal([[0], [1], [2]])
+    })
+  })
+
+  describe('Seq#every', () => {
+    it('fires function on call', async () => {
+      const spy = sinon.spy(res => res)
+      const handler = Seq.every(spy)
+      const result = handler('hello')
+      await expect(result).to.eventually.equal('hello')
+      expect(spy).to.have.been.calledWith('hello')
+    })
+
+    it('creates a new seq for each call', async () => {
+      const spy = sinon.spy()
+      let count = 0
+      const handler = Seq.every(function* () {
+        count = count + 1
+        yield delay(10)
+        return count
+      })
+      await expect(Promise.all([
+        handler(),
+        handler(),
+        handler()
+      ])).to.eventually.deep.equal([3, 3, 3])
     })
   })
 })

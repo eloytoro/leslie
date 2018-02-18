@@ -54,7 +54,7 @@
     "cross-env": "^5.0.5",
     "enzyme": "2",
     "enzyme-adapter-react-15": "^1.0.2",
-    "jsdom": "^11.3.0",
+    "jsdom": "^11.6.2",
     "jsdom-global": "^3.0.2",
     "mobx": "^3.3.1",
     "mobx-react": "^4.3.3",

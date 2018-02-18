@@ -13,7 +13,7 @@ describe('real-world', () => {
       { count: 0 },
     ])
 
-    const addTodo = Seq.handler(function* (event) {
+    const addTodo = Seq.latest(function* (event) {
       yield delay(20)
       store.push({ count: 0 })
     })
