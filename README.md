@@ -47,12 +47,13 @@ object that can be accessed by the sequence and by all child sequences of itself
 * `Seq#promise: Promise`: a promise that resolves when the sequence (and all its children) finishes
 succesfully (no errors emitted), it will resolve if the sequence is cancelled, but with no result
 value.
-* `Seq#done: Boolean`: false if the sequence is still running.
 * `Seq#cancel()`: cancels the sequence (and all of its children).
-* `Seq#resolve(result)`: resolves the sequence and waits for its children to finish
-* `Seq#reject(err)`: rejects the sequence and cancels all of its children
 * `Seq#spawn(input)`: creates a child sequence from the input
 * `Seq#free()`: cancel all the child sequences
+* `Seq#running: Boolean`: is the sequence still running.
+* `Seq#cancelled: Boolean`: was the sequence cancelled.
+* `Seq#resolved: Boolean`: was the sequence resolved.
+* `Seq#rejected: Boolean`: was the sequence rejected.
 
 ### `Seq.handler(listener: (value) => Sequenceable): Function`
 
@@ -95,15 +96,6 @@ cancels the rest.
 ### `yield delay(ms: number, [val]): Promise`
 
 A promise that resolves after the given ms, if `val` is specified, it will resolve to that value.
-
-### `yield observe(observable: observable, [listener]: (value) => Sequenceable): Seq`
-
-Creates a sequence that subscribes to an observable object, observables must have the
-`subscribe(onNext, onErr, onDone)`. Every time the observable emits a value a sequence will be
-spawned with the value passed as a parameter, when the observable emits an error it will throw, and
-when closes it will cancel the sequence.
-
-If the listener param is omitted the sequence will resolve after the first value emitted
 
 ### `yield latest(observable: observable, listener: (value) => Sequenceable): Seq`
 
@@ -197,13 +189,14 @@ import { fork, race, delay } from 'iterffect/effects'
 ### Child sequences
 
 Sequences can have child sequences, these will affect how your sequence behaves. They can be created
-by effects such as `fork`, `race`, `observe` or `latest`.
+by effects such as `fork`, `race` or `latest`.
 
 The following rules apply:
 
-* When a child sequence throws, so will the parent
-* When a parent sequence cancels it will also cancel all of its children
+* When a child sequence throws, so will the parent.
+* When a parent sequence cancels it will also cancel all of its children.
 * When a parent sequence finishes, it wont be resolved until all of its children finish as well.
+* Cancelling a sequence means it will never resolve or reject.
 
 ### Error handling
 
@@ -250,22 +243,5 @@ function* main() {
   yield delay(8000)
   // cancel the sequence after 8 seconds
   yield cancel(seq)
-}
-```
-
-### Using observables
-
-```js
-function* onAction() {
-  /**
-   * will be called every time something is dispatched
-   * to the redux state
-   */
-}
-
-function* main() {
-  // redux's store is observable
-  const store = createStore()
-  yield observe(store, onAction)
 }
 ```
