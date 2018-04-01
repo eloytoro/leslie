@@ -1,176 +1,188 @@
-import './internal/polyfill.js'
 import Effect from './internal/Effect'
 import {
   defer,
   isIterable,
 } from './internal/utils'
-import { forever } from './effects'
+
+const enhancer = (iterable) => ({
+  next: (value) => {
+    return transaction(iterable.next, value);
+  },
+  throw: (err) => {
+    return transaction(iterable.throw, err);
+  }
+});
 
 class Seq {
   static latest(sequenceableFn) {
-    const fg = new Seq(forever())
-    let deferred = defer()
-    const fn = function (...args) {
-      fg.free()
-      const child = fg.spawn(sequenceableFn.call(this, ...args))
-      child.listen('done', (err, result) => {
-        if (err) {
-          deferred.reject(err)
-        } else {
-          deferred.resolve(result)
-        }
-        deferred = defer()
-      })
-      return deferred.promise
+    let deferred = defer();
+    let fg;
+    return function (...args) {
+      if (fg) {
+        fg.cancel();
+      }
+      fg = new Seq(sequenceableFn.call(this, ...args));
+      fg.promise
+        .then(result => {
+          deferred.resolve(result);
+          deferred = defer();
+        })
+        .catch(err => {
+          deferred.reject(err);
+          deferred = defer();
+        });
+      return deferred.promise;
     }
-    fn.cancel = () => fg.free()
-    return fn
-  }
-
-  static handle(sequenceableFn) {
-    console.warn('Seq.handler was deprecated, use Seq.latest instead')
-    return Seq.latest(sequenceableFn)
   }
 
   static every(sequenceableFn) {
-    const fg = new Seq(forever())
-    const fn = function (...args) {
-      const child = fg.spawn(sequenceableFn.call(this, ...args))
-      return child.promise
+    return function (...args) {
+      return Seq.immediate(sequenceableFn.call(this, ...args));
     }
-    fn.cancel = fg.free()
-    return fn
   }
 
   static channel(sequenceableFn) {
-    const fg = new Seq(forever())
-    const fn = function (...args) {
-      const ctx = this
-      const last = fg.children.length && fg.children[fg.children.length - 1].promise
-      const child = fg.spawn(function* () {
-        yield last
-        return yield sequenceableFn.call(ctx, ...args)
-      })
-      return child.promise
+    const queue = [];
+    return function (...args) {
+      const ctx = this;
+      const before = queue.slice();
+      const seq = new Seq(function* () {
+        yield Promise.all(before);
+        return yield sequenceableFn.call(ctx, ...args);
+      });
+      queue.push(seq.promise);
+      return seq.promise;
     }
-    fn.cancel = () => fg.free()
-    return fn
   }
 
-  constructor(input, ctx) {
-    this.done = false
-    this.children = []
-    this.ctx = ctx
-    this.deferred = defer()
-    this.promise = this.deferred.promise
+  static immediate(input) {
+    const seq = new Seq(input);
+    return seq.promise;
+  }
+
+  constructor(input, enhancer) {
+    this.status = 'running';
+    this.children = [];
+    this.deferred = defer();
     this.listeners = {
+      end: [],
       cancel: [],
-      done: [],
-    }
-    this.run(input)
-      .then(
-        (result) => this.resolve(result),
-        (err) => this.reject(err)
-      )
-  }
-
-  run(input) {
-    try {
-      return Promise.resolve(this.next(input))
-    } catch (err) {
-      return Promise.reject(err)
-    }
-  }
-
-  next(input) {
-    if (input === null) {
-      return input
-    } else if (input instanceof Seq) {
-      return input.promise
-    } else if (input instanceof Effect) {
-      return input.handler(this, input.payload)
-    } else if (isIterable(input)) {
-      return this.iterate(input)
-    } else if (Array.isArray(input)) {
-      return Promise.all(input.map(item => this.next(item)))
-    } else if (typeof input === 'function') {
-      return this.next(input(this.ctx))
-    }
-    return input
-  }
-
-  iterate(iterable, step = iterable.next()) {
-    return this.run(step.value)
+    };
+    Promise.resolve(this.next(input))
       .then(result => {
-        if (step.done || this.done) return result
-        return this.iterate(iterable, iterable.next(result))
+        this.resolve(result);
       })
       .catch(err => {
-        if (step.done || this.done) throw err
-        return this.iterate(iterable, iterable.throw(err))
+        this.reject(err);
       })
+  }
+
+  get promise() {
+    return this.deferred.promise;
+  }
+  get running() {
+    return this.status === 'running';
+  }
+  get cancelled() {
+    return this.status === 'cancelled';
+  }
+  get resolved() {
+    return this.status === 'resolved';
+  }
+  get rejected() {
+    return this.status === 'rejected';
+  }
+
+  async next(input) {
+    if (input === null) {
+      return input;
+    } else if (input instanceof Seq) {
+      console.log(input);
+      return input.promise;
+    } else if (input instanceof Effect) {
+      return input.handler(this, input.payload);
+    } else if (isIterable(input)) {
+      return this.iterate(input);
+    } else if (Array.isArray(input)) {
+      return Promise.all(input.map(item => this.next(item)));
+    } else if (typeof input === 'function') {
+      return this.next(input());
+    }
+    return input;
+  }
+
+  async iterate(iterable, step = iterable.next()) {
+    try {
+      const result = await this.next(step.value);
+      if (step.done || !this.running) return result;
+      return this.iterate(iterable, iterable.next(result));
+    } catch (err) {
+      if (step.done || !this.running) throw err;
+      return this.iterate(iterable, iterable.throw(err));
+    }
   }
 
   free() {
-    this.children.forEach(child => child.cancel())
-  }
-
-  resolve(value) {
-    if (this.done) return
-    return Promise.all(this.children.map(child => child.promise))
-      .then(results => {
-        this.done = true
-        const result = value === undefined && results.length > 0
-          ? results
-          : value
-        this.deferred.resolve(result)
-        this.trigger('done', null, result)
-        return result
-      })
-      .catch(err => {
-        return this.reject(err)
-      })
-  }
-
-  reject(err) {
-    if (this.done) return
-    this.done = true
-    this.free()
-    this.deferred.reject(err)
-    this.trigger('done', err)
+    this.children.forEach(child => child.cancel());
   }
 
   spawn(input) {
-    const child = new Seq(input, this.ctx)
-    this.children.push(child)
-    child.promise
-      .catch(err => this.reject(err))
-      .finally(() =>
-        this.children.splice(this.children.indexOf(child), 1)
-      )
-    return child
+    const child = new Seq(input);
+    this.children.push(child);
+    child.listen('end', () => {
+      this.children.splice(this.children.indexOf(child), 1);
+      if (!this.running && !this.cancelled) {
+        this.end();
+      }
+    });
+    return child;
+  }
+
+  end() {
+    if (this.children.length > 0) return;
+    if (this.resolved) {
+      this.deferred.resolve(this.result);
+    } else if (this.rejected) {
+      this.deferred.reject(this.error);
+    }
+    this.trigger('end');
   }
 
   cancel() {
-    if (this.done) return
-    this.done = true
-    this.free()
-    this.trigger('cancel')
-    this.deferred.resolve()
+    if (!this.running) return;
+    this.status = 'cancelled';
+    this.free();
+    this.trigger('cancel');
+    this.end();
+  }
+
+  resolve(value) {
+    if (!this.running) return;
+    this.status = 'resolved';
+    this.result = value;
+    this.end();
+  }
+
+  reject(err) {
+    if (!this.running) return;
+    this.status = 'rejected';
+    this.error = err;
+    this.free();
+    this.end();
   }
 
   trigger(event, ...args) {
-    this.listeners[event].forEach(listener => listener(...args))
+    this.listeners[event].forEach(listener => listener(...args));
   }
 
   listen(event, listener) {
-    if (typeof listener !== 'function') return
-    const listeners = this.listeners[event]
+    if (typeof listener !== 'function') return;
+    const listeners = this.listeners[event];
     if (!listeners) {
-      throw new Error(`Seq#listen(${event}) is not a valid event`)
+      throw new Error(`Seq#listen(${event}) is not a valid event`);
     }
-    listeners.push(listener)
-    return () => listeners.splice(listeners.indexOf(listener), 1)
+    listeners.push(listener);
+    return () => listeners.splice(listeners.indexOf(listener), 1);
   }
 }
 
