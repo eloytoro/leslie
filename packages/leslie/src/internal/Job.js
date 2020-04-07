@@ -1,66 +1,11 @@
-import Effect from './internal/Effect'
+import Effect from './Effect'
 import {
   defer,
   isIterable,
-} from './internal/utils'
+} from './utils'
 
-const enhancer = (iterable) => ({
-  next: (value) => {
-    return transaction(iterable.next, value);
-  },
-  throw: (err) => {
-    return transaction(iterable.throw, err);
-  }
-});
-
-class Seq {
-  static latest(sequenceableFn) {
-    let deferred = defer();
-    let fg;
-    return function (...args) {
-      if (fg) {
-        fg.cancel();
-      }
-      fg = new Seq(sequenceableFn.call(this, ...args));
-      fg.promise
-        .then(result => {
-          deferred.resolve(result);
-          deferred = defer();
-        })
-        .catch(err => {
-          deferred.reject(err);
-          deferred = defer();
-        });
-      return deferred.promise;
-    }
-  }
-
-  static every(sequenceableFn) {
-    return function (...args) {
-      return Seq.immediate(sequenceableFn.call(this, ...args));
-    }
-  }
-
-  static channel(sequenceableFn) {
-    const queue = [];
-    return function (...args) {
-      const ctx = this;
-      const before = queue.slice();
-      const seq = new Seq(function* () {
-        yield Promise.all(before);
-        return yield sequenceableFn.call(ctx, ...args);
-      });
-      queue.push(seq.promise);
-      return seq.promise;
-    }
-  }
-
-  static immediate(input) {
-    const seq = new Seq(input);
-    return seq.promise;
-  }
-
-  constructor(input, enhancer) {
+export default class Job {
+  constructor(input) {
     this.status = 'running';
     this.children = [];
     this.deferred = defer();
@@ -96,7 +41,7 @@ class Seq {
   async next(input) {
     if (input === null) {
       return input;
-    } else if (input instanceof Seq) {
+    } else if (input instanceof Job) {
       console.log(input);
       return input.promise;
     } else if (input instanceof Effect) {
@@ -127,7 +72,7 @@ class Seq {
   }
 
   spawn(input) {
-    const child = new Seq(input);
+    const child = new Job(input);
     this.children.push(child);
     child.listen('end', () => {
       this.children.splice(this.children.indexOf(child), 1);
@@ -179,11 +124,9 @@ class Seq {
     if (typeof listener !== 'function') return;
     const listeners = this.listeners[event];
     if (!listeners) {
-      throw new Error(`Seq#listen(${event}) is not a valid event`);
+      throw new Error(`Job#listen(${event}) is not a valid event`);
     }
     listeners.push(listener);
     return () => listeners.splice(listeners.indexOf(listener), 1);
   }
 }
-
-export default Seq
