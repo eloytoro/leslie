@@ -42,7 +42,6 @@ export default class Job {
     if (input === null) {
       return input;
     } else if (input instanceof Job) {
-      console.log(input);
       return input.promise;
     } else if (input instanceof Effect) {
       return input.handler(this, input.payload);
