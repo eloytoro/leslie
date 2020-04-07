@@ -1,5 +1,5 @@
 {
-  "version": "0.0.0",
+  "version": "0.1.0-alpha.0",
   "name": "leslie-react",
   "repository": {
     "url": "https://github.com/eloytoro/leslie",
@@ -49,8 +49,7 @@
   },
   "dependencies": {
     "@babel/runtime": "^7.7.4",
-    "leslie": "^0.0.0"
+    "leslie": "^1.0.0-alpha.0"
   },
-  "jest": {
-  }
+  "jest": {}
 }
