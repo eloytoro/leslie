@@ -1,0 +1,21 @@
+{
+  "useWorkspaces": true,
+  "npmClient": "yarn",
+  "version": "independent",
+  "command": {
+    "publish": {
+      "registry": "https://registry.npmjs.com/",
+      "ignoreChanges": [
+        ".eslintignore",
+        ".eslintrc*",
+        ".prettierrc",
+        ".npmignore",
+        "*.md",
+        "*.lock",
+        "*.story.js",
+        "*.test.js"
+      ]
+    }
+  }
+}
+
