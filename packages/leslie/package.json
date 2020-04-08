@@ -18,7 +18,7 @@
     "build:esm": "cross-env BABEL_ENV=esm babel src --out-dir esm",
     "build": "yarn clean && yarn build:cjs && yarn build:esm",
     "test": "jest",
-    "prepare": "yarn build"
+    "preversion": "yarn test && yarn build"
   },
   "keywords": [
     "generator",
@@ -45,5 +45,6 @@
   "dependencies": {
     "@babel/runtime": "^7.7.4"
   },
-  "jest": {}
+  "jest": {},
+  "gitHead": "b532109095a83b1bd107d42ad3fc2480f230ea1a"
 }
