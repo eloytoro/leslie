@@ -121,7 +121,6 @@ describe('Job', () => {
 
   it('handles errors', async () => {
     const err = new Error();
-    const handle = jest.fn();
     function* gen() {
       yield Promise.reject(err);
     }

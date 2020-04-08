@@ -1,7 +1,7 @@
 import Job from './internal/Job';
 import { defer } from './internal/utils';
 
-export const immediate = (input) => {
+export const immediate = async (input) => {
   const seq = new Job(input);
   return seq.promise;
 }
@@ -9,7 +9,7 @@ export const immediate = (input) => {
 export const latest = (genFn) => {
   let deferred = defer();
   let fg;
-  return function (...args) {
+  return async function (...args) {
     if (fg) {
       fg.cancel();
     }
@@ -28,14 +28,14 @@ export const latest = (genFn) => {
 }
 
 export const every = (genFn) => {
-  return function (...args) {
+  return async function (...args) {
     return immediate(genFn.call(this, ...args));
   }
 }
 
 export const channel = (genFn) => {
   const queue = [];
-  return function (...args) {
+  return async function (...args) {
     const ctx = this;
     const before = queue.slice();
     const seq = new Job(function* () {

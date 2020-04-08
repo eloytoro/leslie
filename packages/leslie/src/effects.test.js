@@ -1,27 +1,32 @@
-import Job from '../src/internal/Job';
-import { delay, fork, forever, race, teardown } from '../src';
+import Job from './internal/Job';
+import { defer } from './internal/utils';
+import { delay, fork, forever, race, teardown } from './effects';
 
 describe('fork', () => {
   it('forks a job', async () => {
     let count = 0;
     const done = jest.fn();
-    function* child(ms) {
-      yield delay(ms);
+    const stops = [defer(), defer(), defer(), defer()];
+    function* child(d) {
+      yield d.promise;
       count = count + 1;
       return count;
     }
     function* gen() {
-      const resultArray = yield [fork(child(15)), fork(child(15)), child(0)];
-      const seq = yield fork(child(15));
+      const resultArray = yield [fork(child(stops[0])), fork(child(stops[1])), child(stops[2])];
+      const seq = yield fork(child(stops[3]));
       done(resultArray, seq);
     }
     const seq = new Job(gen());
     expect(done).not.toHaveBeenCalled();
-    expect(seq.running).toBe(true);
-    await delay(5);
+    expect(seq.pending).toBe(true);
+    await stops[2].resolve();
     expect(done).toHaveBeenCalled();
-    expect(seq.running).toBe(false);
-    await delay(20);
+    expect(seq.pending).toBe(false);
+    expect(count).toBe(1);
+    await stops[0].resolve();
+    await stops[1].resolve();
+    await stops[3].resolve();
     const resultArray = done.mock.calls[0][0];
     expect(resultArray).toHaveLength(3);
     expect(resultArray[0]).toBeInstanceOf(Job);
@@ -31,31 +36,46 @@ describe('fork', () => {
   });
 
   it('waits for child job', async () => {
-    const now = Date.now();
-    function* child(ms) {
-      yield delay(ms);
+    const first = jest.fn();
+    const done = jest.fn();
+    const stop1 = defer();
+    const stop2 = defer();
+    function* child(p) {
+      yield p;
+      done();
     }
     function* gen() {
-      yield [fork(child(20)), fork(child(10))];
+      yield [fork(child(stop1.promise)), fork(child(stop2.promise))];
+      first();
     }
     const seq = new Job(gen());
+    expect(first).toHaveBeenCalled();
+    expect(seq.children.map(c => c.done)).toEqual([false, false]);
+    expect(seq.done).toBe(false);
+    stop1.resolve();
+    stop2.resolve();
+    expect(done).not.toHaveBeenCalled();
     await seq.promise;
-    expect(Date.now() - now).toBeGreaterThan(10);
+    expect(seq.children.map(c => c.done)).toEqual([true, true]);
+    expect(seq.done).toBe(true);
+    expect(done).toHaveBeenCalledTimes(2);
   });
 
   it('cancels forks', async () => {
-    const now = Date.now();
+    const never = jest.fn();
+    const stop1 = defer();
     function* child() {
-      yield forever();
+      yield stop1.promise;
+      never();
     }
     function* gen() {
       const seq = yield fork(child());
-      yield delay(10);
       seq.cancel();
     }
     const seq = new Job(gen());
+    stop1.resolve();
     await seq.promise;
-    expect(Date.now() - now).toBeLessThan(20);
+    expect(never).not.toHaveBeenCalled();
   });
 
   it('propagates error to parent', async () => {
@@ -64,16 +84,18 @@ describe('fork', () => {
     const kill = jest.fn(() => {
       throw err;
     });
-    function* child(ms) {
-      yield delay(ms);
+    const stop1 = defer();
+    function* child(p) {
+      yield p;
       kill();
     }
     function* gen() {
-      const seq = yield fork(child(20));
-      yield delay(30);
+      yield fork(child(stop1.promise));
+      yield forever();
       done();
     }
     const seq = new Job(gen());
+    stop1.resolve();
     await expect(seq.promise).rejects.toThrow(err);
     expect(done).not.toHaveBeenCalled();
     expect(kill).toHaveBeenCalled();
@@ -84,13 +106,15 @@ describe('race', () => {
   it('races two sequences', async () => {
     const done1 = jest.fn();
     const done2 = jest.fn();
+    const stop1 = defer();
+    const stop2 = defer();
     function* child1() {
-      yield delay(10);
+      yield stop1.promise;
       done1();
       return 'one';
     }
     function* child2() {
-      yield delay(20);
+      yield stop2.promise;
       done2();
       return 'two';
     }
@@ -98,6 +122,7 @@ describe('race', () => {
       return yield race(child1(), child2());
     }
     const seq = new Job(gen());
+    stop1.resolve();
     const result = await seq.promise;
     expect(done1).toHaveBeenCalled();
     expect(done2).not.toHaveBeenCalled();
@@ -114,7 +139,7 @@ describe('race', () => {
       return yield race(child());
     }
     const seq = new Job(gen());
-    await delay(5);
+    await delay(0);
     seq.cancel();
     expect(done).not.toHaveBeenCalled();
   });
@@ -129,7 +154,6 @@ describe('teardown', () => {
       never();
     }
     const seq = new Job(gen());
-    await delay(5);
     expect(handler).not.toHaveBeenCalled();
     seq.cancel();
     expect(handler).toHaveBeenCalledTimes(1);
@@ -144,7 +168,7 @@ describe('teardown', () => {
       yield forever();
     }
     const seq = new Job(gen());
-    await delay(5);
+    await delay(0);
     seq.cancel();
     expect(handler).not.toHaveBeenCalled();
     expect(result).toBe('result');

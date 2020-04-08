@@ -1,6 +1,7 @@
 const { BABEL_ENV } = process.env;
 
 module.exports = {
+  ignore: NODE_ENV !== 'test' ? ['**/*.test.js'] : [],
   presets: [
     ['@babel/preset-env', {
       modules: BABEL_ENV === 'esm' ? false : 'commonjs',

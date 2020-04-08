@@ -42,9 +42,13 @@ export const teardown = effect(
   (input, fn) => ({ input, fn }),
   (job, { input, fn }) => {
     const unsub = job.listen('cancel', () => fn(input));
-    return job.next(input).then(result => {
+    return new Promise((resolve, reject) => job.next(input, (err, result) => {
       unsub();
-      return result;
-    });
+      if (err) {
+        reject(err);
+      } else {
+        resolve(result);
+      }
+    }));
   }
 )
