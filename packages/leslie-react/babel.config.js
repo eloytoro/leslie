@@ -1,4 +1,4 @@
-const { BABEL_ENV } = process.env;
+const { BABEL_ENV, NODE_ENV } = process.env;
 
 module.exports = {
   ignore: NODE_ENV !== 'test' ? ['**/*.test.js'] : [],
