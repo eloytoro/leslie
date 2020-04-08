@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useRef } from 'react';
-import { Job, defer, immediate } from 'leslie';
+import { Job, defer } from 'leslie';
 
 export const useLatestLazy = (genFn, watch = []) => {
   const deferred = useRef(defer());
@@ -68,7 +68,7 @@ export const useChannel = (genFn, watch) => {
 export const useEveryLazy = (genFn) => {
   const jobs = useRef([]);
   const creator = useCallback(function (...args) {
-    const job =  immediate(genFn.call(this, ...args));
+    const job = new Job(Promise.resolve(genFn.call(this, ...args)));
     jobs.current.push(job);
     return job;
   });
